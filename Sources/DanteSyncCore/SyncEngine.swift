@@ -24,6 +24,13 @@ public struct SyncOptions {
     /// Moving up a rate band can reduce channel counts; refuse unless explicitly allowed.
     public var allowBandUp = false
     public var discoveryWait: TimeInterval = 4
+    /// After the USB 16x16 is verified at 88.2k, hold this long before the sync reports.
+    /// macOS (AppleUSBAudio) latches the device's audio into zeros, both ways, when an app
+    /// starts audio within a few seconds of an 88.2k stream restart; the USB stream itself
+    /// stays correct. Measured on the Pi's multi-rate gadget (USB 16x16 repo,
+    /// PROJECT_HANDOFF.md, 2026-10-18): bad 7 of 7 with audio ~2.5 s after the set, clean
+    /// every time from ~7 s. 44.1k, 48k and 96k are not affected.
+    public var usb882Settle: TimeInterval = 10
     public var rateTimeout: TimeInterval = 20
     public var lockTimeout: TimeInterval = 15
 
@@ -157,7 +164,8 @@ public final class SyncEngine {
 
         // 2. Everyone else in parallel, the USB 16x16 with them: the Pi takes its Dante set
         // and its gadget's rate as one change.
-        async let usbResult: DeviceResult? = usb == nil ? nil : applyCoreAudio(target, to: usb!, timeout: options.rateTimeout)
+        async let usbResult: DeviceResult? = usb == nil ? nil
+            : applyCoreAudio(target, to: usb!, timeout: options.rateTimeout, settle: options.usb882Settle)
         report.results += await apply(target, to: followers, timeout: options.rateTimeout)
         if let result = await usbResult { report.results.append(result) }
         return report
@@ -184,8 +192,10 @@ public final class SyncEngine {
                     + offered.map(formatRate).joined(separator: ", ") + " (would fail)")
     }
 
-    /// Sets a CoreAudio device and waits until it reads the new rate.
-    private func applyCoreAudio(_ target: Int, to device: CoreAudioRate.Device, timeout: TimeInterval) async -> DeviceResult {
+    /// Sets a CoreAudio device and waits until it reads the new rate, then holds for the
+    /// device's settle time at that rate, if it has one (`CoreAudioRate.settleTime`).
+    private func applyCoreAudio(_ target: Int, to device: CoreAudioRate.Device, timeout: TimeInterval,
+                                settle: TimeInterval = 0) async -> DeviceResult {
         let current = CoreAudioRate.nominalRate(of: device)
         if current == target {
             return .init(device: device.name, outcome: .alreadyAtRate, detail: formatRate(target))
@@ -199,7 +209,14 @@ public final class SyncEngine {
         log("Set \(device.name) \(current.map(formatRate) ?? "?") → \(formatRate(target)) (CoreAudio)")
         if await CoreAudioRate.waitForRate(target, uid: device.uid, timeout: timeout) {
             let seconds = String(format: "%.1f", Date().timeIntervalSince(sentAt))
-            return .init(device: device.name, outcome: .changed, detail: "verified by CoreAudio after \(seconds) s")
+            let hold = CoreAudioRate.settleTime(target, uid: device.uid, usb882Settle: settle)
+            guard hold > 0 else {
+                return .init(device: device.name, outcome: .changed, detail: "verified by CoreAudio after \(seconds) s")
+            }
+            log("\(device.name) at \(formatRate(target)): holding \(Int(hold)) s before reporting; start audio on it only after this sync finishes")
+            try? await Task.sleep(nanoseconds: UInt64(hold * 1e9))
+            return .init(device: device.name, outcome: .changed,
+                         detail: "verified by CoreAudio after \(seconds) s, then held \(Int(hold)) s (88.2k settle)")
         }
         return .init(device: device.name, outcome: .failed, detail: "still not \(formatRate(target)) after \(Int(timeout)) s")
     }

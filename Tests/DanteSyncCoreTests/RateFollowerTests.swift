@@ -75,3 +75,17 @@ final class RateFollowerTests: XCTestCase {
         XCTAssertEqual(follower.observe([mh: 48000, usb: 96000], at: at(10)), [])
     }
 }
+
+final class SettleTimeTests: XCTestCase {
+    let usbUID = CoreAudioRate.usb16x16UIDPrefix + "AUDDEV001:1,2"
+    let mhUID = CoreAudioRate.metricHaloUIDPrefix + "49057"
+
+    func testOnlyTheUSB16x16At882kHolds() {
+        XCTAssertEqual(CoreAudioRate.settleTime(88200, uid: usbUID, usb882Settle: 10), 10)
+        for rate in [44100, 48000, 96000, 176400, 192000] {
+            XCTAssertEqual(CoreAudioRate.settleTime(rate, uid: usbUID, usb882Settle: 10), 0, "\(rate)")
+        }
+        XCTAssertEqual(CoreAudioRate.settleTime(88200, uid: mhUID, usb882Settle: 10), 0, "the Metric Halo is not affected")
+        XCTAssertEqual(CoreAudioRate.settleTime(88200, uid: usbUID, usb882Settle: -3), 0)
+    }
+}

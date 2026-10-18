@@ -289,3 +289,18 @@ local-network privacy prompt).
    Mac side of its rate changes.
 3. Is the Dante Via device in use, and should it follow?
 4. Do you want encoding (bit depth) to follow too, or rate only?
+
+**88.2k settle on the USB 16x16 (2026-10-18).** On the Pi's multi-rate gadget, macOS
+latches the USB 16x16's audio into zeros, both ways, when an app starts audio within a few
+seconds of an 88.2k stream restart, and it stays that way until the rate is changed again
+(USB 16x16 repo: `PROJECT_HANDOFF.md`, the 2026-10-18 FOUND entries, and
+`work/pi-tuning/MULTIRATE_GADGET_PLAN.md`, "88.2 kHz and macOS"). The USB stream itself
+stays correct; 44.1k, 48k and 96k are not affected. So:
+- `sync` holds `--usb882-settle` seconds (default 10) after the USB 16x16 is verified at
+  88.2k before it reports: start audio on it only after the sync finishes.
+  `CoreAudioRate.settleTime` decides, tested in `SettleTimeTests`.
+- `watch` cannot hold an app that set 88.2k itself, so it logs a warning with the recovery:
+  stop audio, set 48k, wait 10 s, set 88.2k, wait 10 s, start audio.
+- Checked: `swift test` (7 tests) and `sync --rate 88200 --dry-run`. The hold has not
+  run live: a live 88.2k sync moves every Dante device a band up, and the Pi's Dante side
+  still refuses anything but 48k.

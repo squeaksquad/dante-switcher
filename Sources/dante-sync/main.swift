@@ -8,9 +8,12 @@ Usage:
       leader lock state.
   dante-sync sync [--rate 48000] [--source mh|usb16x16] [--exclude NAME]... [--leader PULSE]
                   [--leave-master] [--no-usb] [--dry-run] [--allow-band-up] [--interface en12]
+                  [--usb882-settle 10]
       Set the Metric Halo first if it is not the source, then the leader, wait for word-clock
       lock, then every other Dante device and the USB 16x16 together, each verified.
       Without --rate, the target is the source's CoreAudio rate (default: the Metric Halo).
+      When the USB 16x16 is set to 88.2k, the sync holds --usb882-settle seconds before it
+      reports: macOS needs the 88.2k stream settled before an app starts audio on it.
   dante-sync watch [same options as sync, less --rate and --source]
       Follow rate changes on the Metric Halo or the USB 16x16 (a DAW session, Audio MIDI Setup,
       MIOConsole3d): a change that holds for 2 s is synced to everything else, the changed
@@ -48,6 +51,7 @@ while !arguments.isEmpty {
     case "--exclude": options.exclude.append(value())
     case "--leader": options.leaderMatch = value()
     case "--wait": options.discoveryWait = TimeInterval(value()) ?? options.discoveryWait
+    case "--usb882-settle": options.usb882Settle = TimeInterval(value()) ?? options.usb882Settle
     case "--dry-run": options.dryRun = true
     case "--allow-band-up": options.allowBandUp = true
     default: print("Unknown option \(flag)\n\n\(usage)"); exit(2)
@@ -149,6 +153,12 @@ case "watch":
             case .follow(let decision):
                 log("")
                 log("\(decision.source) changed to \(formatRate(decision.rate)); syncing everything else")
+                if decision.source == SyncOptions.Source.usb16x16.rawValue && decision.rate == 88200 {
+                    // The app that set it has likely started audio already, so no hold here can help.
+                    log("WARNING: an app set the USB 16x16 to 88.2k. If it started audio within a few seconds,"
+                        + " macOS may pass only silence on the USB 16x16, both ways, until the rate is changed again."
+                        + " If so: stop audio on it, set it to 48k, wait 10 s, set 88.2k, wait 10 s, then start audio.")
+                }
                 var run = options
                 run.targetRate = decision.rate
                 run.source = SyncOptions.Source(rawValue: decision.source) ?? .metricHalo

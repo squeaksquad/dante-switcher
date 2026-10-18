@@ -68,6 +68,12 @@ public enum CoreAudioRate {
         guard status == noErr else { throw SetError.status(status) }
     }
 
+    /// How long a rate change on this device must settle before an app starts audio on it:
+    /// `usb882Settle` for the USB 16x16 at 88.2k (see `SyncOptions.usb882Settle`), else 0.
+    public static func settleTime(_ rate: Int, uid: String, usb882Settle: TimeInterval) -> TimeInterval {
+        rate == 88200 && uid.hasPrefix(usb16x16UIDPrefix) ? max(0, usb882Settle) : 0
+    }
+
     /// Polls until the device reads `rate`, or the timeout passes. Re-finds the device by UID
     /// each time, because a rate change can make a USB device re-enumerate under a new ID.
     public static func waitForRate(_ rate: Int, uid: String, timeout: TimeInterval) async -> Bool {
