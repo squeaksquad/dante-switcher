@@ -4,18 +4,18 @@ import Foundation
 let usage = """
 Usage:
   dante-sync status [--interface en12] [--wait 4]
-      Read-only: Metric Halo and USB 16x16 rates, every Dante device's rate from heartbeats,
+      Read-only: Metric Halo and USB-AoIP rates, every Dante device's rate from heartbeats,
       leader lock state.
-  dante-sync sync [--rate 48000] [--source mh|usb16x16] [--exclude NAME]... [--leader PULSE]
+  dante-sync sync [--rate 48000] [--source mh|usb-aoip] [--exclude NAME]... [--leader PULSE]
                   [--leave-master] [--no-usb] [--dry-run] [--allow-band-up] [--interface en12]
                   [--usb882-settle 10]
       Set the Metric Halo first if it is not the source, then the leader, wait for word-clock
-      lock, then every other Dante device and the USB 16x16 together, each verified.
+      lock, then every other Dante device and the USB-AoIP together, each verified.
       Without --rate, the target is the source's CoreAudio rate (default: the Metric Halo).
-      When the USB 16x16 is set to 88.2k, the sync holds --usb882-settle seconds before it
+      When the USB-AoIP is set to 88.2k, the sync holds --usb882-settle seconds before it
       reports: macOS needs the 88.2k stream settled before an app starts audio on it.
   dante-sync watch [same options as sync, less --rate and --source]
-      Follow rate changes on the Metric Halo or the USB 16x16 (a DAW session, Audio MIDI Setup,
+      Follow rate changes on the Metric Halo or the USB-AoIP (a DAW session, Audio MIDI Setup,
       MIOConsole3d): a change that holds for 2 s is synced to everything else, the changed
       device being the source. Ctrl-C stops it.
 """
@@ -43,7 +43,7 @@ while !arguments.isEmpty {
     case "--source":
         switch value().lowercased() {
         case "mh", "metric-halo", "metrichalo": options.source = .metricHalo
-        case "usb16x16", "usb", "usb-16x16": options.source = .usb16x16
+        case "usb16x16", "usb", "usb-16x16", "usb-aoip": options.source = .usb16x16
         default: print("--source is mh or usb16x16"); exit(2)
         }
     case "--leave-master": options.followMaster = false
@@ -93,7 +93,7 @@ case "status":
         log("\(usb.name): \(CoreAudioRate.nominalRate(of: usb).map(formatRate) ?? "unknown")"
             + " (offers \(CoreAudioRate.availableRates(of: usb).map(formatRate).joined(separator: ", ")))")
     } else {
-        log("USB 16x16: not in CoreAudio")
+        log("USB-AoIP: not in CoreAudio")
     }
     try? await Task.sleep(nanoseconds: UInt64(options.discoveryWait * 1e9))
     let devices = network.snapshot()
@@ -137,7 +137,7 @@ case "watch":
         return now
     }
     let start = readings()
-    log("Watching " + (start.isEmpty ? "(no Metric Halo or USB 16x16 yet)"
+    log("Watching " + (start.isEmpty ? "(no Metric Halo or USB-AoIP yet)"
         : start.sorted { $0.key < $1.key }.map { "\($0.key) \(formatRate($0.value))" }.joined(separator: ", "))
         + (options.dryRun ? " — dry run, nothing is set" : ""))
     if Set(start.values).count > 1 {
@@ -155,8 +155,8 @@ case "watch":
                 log("\(decision.source) changed to \(formatRate(decision.rate)); syncing everything else")
                 if decision.source == SyncOptions.Source.usb16x16.rawValue && decision.rate == 88200 {
                     // The app that set it has likely started audio already, so no hold here can help.
-                    log("WARNING: an app set the USB 16x16 to 88.2k. If it started audio within a few seconds,"
-                        + " macOS may pass only silence on the USB 16x16, both ways, until the rate is changed again."
+                    log("WARNING: an app set the USB-AoIP to 88.2k. If it started audio within a few seconds,"
+                        + " macOS may pass only silence on the USB-AoIP, both ways, until the rate is changed again."
                         + " If so: stop audio on it, set it to 48k, wait 10 s, set 88.2k, wait 10 s, then start audio.")
                 }
                 var run = options

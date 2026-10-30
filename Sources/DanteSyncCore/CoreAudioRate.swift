@@ -2,12 +2,19 @@ import CoreAudio
 import Foundation
 
 /// Reads and sets CoreAudio devices' rates: the clock master (the Metric Halo) and the
-/// USB 16x16 (the Pi's UAC2 gadget, which bridges to the Inferno Dante device). Phase 0
+/// USB-AoIP (the Pi's UAC2 gadget, named USB 16x16 until 2026-10-30, which bridges to the Inferno Dante device). Phase 0
 /// showed one NominalSampleRate callback per change, including changes made in MIOConsole3d.
 public enum CoreAudioRate {
     public static let metricHaloUIDPrefix = "com.mhlabs.mhlink."
     /// The gadget's UID is `AppleUSBAudioEngine:<vendor>:<product>:<serial>:<interfaces>`.
-    public static let usb16x16UIDPrefix = "AppleUSBAudioEngine:Bryan DiMaio:USB 16x16:"
+    public static let usb16x16UIDPrefix = "AppleUSBAudioEngine:Bryan DiMaio:USB-AoIP:"
+    /// The gadget's UID before the rename (and after its rollback); matched as the same device.
+    public static let usb16x16LegacyUIDPrefix = "AppleUSBAudioEngine:Bryan DiMaio:USB 16x16:"
+
+    /// Whether `uid` starts with `prefix`; the gadget's prefix also matches its legacy one.
+    public static func uid(_ uid: String, matches prefix: String) -> Bool {
+        uid.hasPrefix(prefix) || (prefix == usb16x16UIDPrefix && uid.hasPrefix(usb16x16LegacyUIDPrefix))
+    }
 
     public enum SetError: Error, CustomStringConvertible {
         case unsupported(rate: Int, offered: [Int])
@@ -31,7 +38,7 @@ public enum CoreAudioRate {
     public static func findDevice(uidPrefix: String = metricHaloUIDPrefix) -> Device? {
         for id in allDevices() {
             let uid = string(id, kAudioDevicePropertyDeviceUID)
-            if uid.hasPrefix(uidPrefix) {
+            if self.uid(uid, matches: uidPrefix) {
                 return Device(id: id, name: string(id, kAudioObjectPropertyName), uid: uid)
             }
         }
@@ -69,9 +76,9 @@ public enum CoreAudioRate {
     }
 
     /// How long a rate change on this device must settle before an app starts audio on it:
-    /// `usb882Settle` for the USB 16x16 at 88.2k (see `SyncOptions.usb882Settle`), else 0.
+    /// `usb882Settle` for the USB-AoIP at 88.2k (see `SyncOptions.usb882Settle`), else 0.
     public static func settleTime(_ rate: Int, uid: String, usb882Settle: TimeInterval) -> TimeInterval {
-        rate == 88200 && uid.hasPrefix(usb16x16UIDPrefix) ? max(0, usb882Settle) : 0
+        rate == 88200 && self.uid(uid, matches: usb16x16UIDPrefix) ? max(0, usb882Settle) : 0
     }
 
     /// Polls until the device reads `rate`, or the timeout passes. Re-finds the device by UID

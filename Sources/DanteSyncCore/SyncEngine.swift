@@ -5,7 +5,7 @@ public struct SyncOptions {
     /// is nil, and it is the one CoreAudio device not set.
     public enum Source: String {
         case metricHalo = "Metric Halo"
-        case usb16x16 = "USB 16x16"
+        case usb16x16 = "USB-AoIP"
     }
 
     /// Rate to apply; nil means read it from `source` via CoreAudio.
@@ -122,7 +122,7 @@ public final class SyncEngine {
         let usb = options.followUSB16x16 && options.source != .usb16x16
             ? CoreAudioRate.findDevice(uidPrefix: CoreAudioRate.usb16x16UIDPrefix) : nil
         if options.followUSB16x16 && options.source != .usb16x16 && usb == nil {
-            report.results.append(.init(device: "USB 16x16", outcome: .skipped, detail: "not in CoreAudio (gadget not connected)"))
+            report.results.append(.init(device: "USB-AoIP", outcome: .skipped, detail: "not in CoreAudio (gadget not connected)"))
         }
 
         if options.dryRun {

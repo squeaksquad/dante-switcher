@@ -304,3 +304,10 @@ stays correct; 44.1k, 48k and 96k are not affected. So:
 - Checked: `swift test` (7 tests) and `sync --rate 88200 --dry-run`. The hold has not
   run live: a live 88.2k sync moves every Dante device a band up, and the Pi's Dante side
   still refuses anything but 48k.
+
+**Renamed (2026-10-30): the USB 16x16 is now USB-AoIP.** The Pi's gadget takes the project's
+name (repo `github.com/squeaksquad/USB-AoIP`, `work/pi-tuning/install-gadget-usb-aoip.sh`), so
+its CoreAudio UID becomes `AppleUSBAudioEngine:Bryan DiMaio:USB-AoIP:...`. `CoreAudioRate`
+matches that prefix and still the old `...:USB 16x16:` one (`uid(_:matches:)`, tested), so the
+gadget's rollback needs no change here. The source's display name is `USB-AoIP`; `--source`
+also takes `usb-aoip`. Entries above keep the old name.

@@ -4,7 +4,7 @@ import XCTest
 final class RateFollowerTests: XCTestCase {
     let t0 = Date(timeIntervalSince1970: 1_000_000)
     func at(_ seconds: Double) -> Date { t0.addingTimeInterval(seconds) }
-    let mh = "Metric Halo", usb = "USB 16x16"
+    let mh = "Metric Halo", usb = "USB-AoIP"
 
     func testAChangeIsFollowedOnceItHoldsForTheSettleTime() {
         var follower = RateFollower(initial: [mh: 48000, usb: 48000])
@@ -87,5 +87,12 @@ final class SettleTimeTests: XCTestCase {
         }
         XCTAssertEqual(CoreAudioRate.settleTime(88200, uid: mhUID, usb882Settle: 10), 0, "the Metric Halo is not affected")
         XCTAssertEqual(CoreAudioRate.settleTime(88200, uid: usbUID, usb882Settle: -3), 0)
+    }
+
+    func testTheGadgetsLegacyNameIsTheSameDevice() {
+        let legacy = CoreAudioRate.usb16x16LegacyUIDPrefix + "AUDDEV001:1,2"
+        XCTAssertTrue(CoreAudioRate.uid(legacy, matches: CoreAudioRate.usb16x16UIDPrefix))
+        XCTAssertEqual(CoreAudioRate.settleTime(88200, uid: legacy, usb882Settle: 10), 10)
+        XCTAssertFalse(CoreAudioRate.uid(legacy, matches: CoreAudioRate.metricHaloUIDPrefix))
     }
 }
