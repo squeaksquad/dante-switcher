@@ -3,11 +3,11 @@ import Foundation
 
 let usage = """
 Usage:
-  dante-sync status [--interface en12] [--wait 4]
+  dante-sync status [--interface en7] [--wait 4]
       Read-only: Metric Halo and USB-AoIP rates, every Dante device's rate from heartbeats,
       leader lock state.
   dante-sync sync [--rate 48000] [--source mh|usb-aoip] [--exclude NAME]... [--leader PULSE]
-                  [--leave-master] [--no-usb] [--dry-run] [--allow-band-up] [--interface en12]
+                  [--leave-master] [--no-usb] [--dry-run] [--allow-band-up] [--interface en7]
                   [--usb882-settle 10]
       Set the Metric Halo first if it is not the source, then the leader, wait for word-clock
       lock, then every other Dante device and the USB-AoIP together, each verified.
@@ -27,7 +27,7 @@ guard let command = arguments.first, ["status", "sync", "watch"].contains(comman
 }
 arguments.removeFirst()
 
-var interfaceName = "en12"
+var interfaceName = "en7"
 var options = SyncOptions()
 while !arguments.isEmpty {
     let flag = arguments.removeFirst()

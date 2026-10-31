@@ -39,8 +39,11 @@ public final class DanteNetwork {
             throw SocketError("no IPv4 address/MAC on \(interfaceName)")
         }
         self.interface = interface
-        heartbeats = try UDPSocket(port: 8708, bindAddress: nil, joinGroup: "224.0.0.233", interfaceAddress: interface.ipv4)
-        settingsMulticast = try UDPSocket(port: 8702, bindAddress: nil, joinGroup: "224.0.0.231", interfaceAddress: interface.ipv4)
+        // Bound to the group address, not *: DVS's conmon_server holds 224.0.0.233:8708 and 224.0.0.231:8702
+        // with SO_REUSEADDR only, and the BSD stack counts SO_REUSEADDR as port sharing only for a multicast
+        // bind. A wildcard bind failed with EADDRINUSE whenever DVS was running (2026-10-31, en7).
+        heartbeats = try UDPSocket(port: 8708, bindAddress: "224.0.0.233", joinGroup: "224.0.0.233", interfaceAddress: interface.ipv4)
+        settingsMulticast = try UDPSocket(port: 8702, bindAddress: "224.0.0.231", joinGroup: "224.0.0.231", interfaceAddress: interface.ipv4)
         sender = try UDPSocket(port: 0, bindAddress: interface.ipv4)
     }
 

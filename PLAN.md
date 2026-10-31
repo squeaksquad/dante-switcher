@@ -271,8 +271,29 @@ there that this app owns the Mac side and that the Mac decides the rate).
   3.1 s, D2USB 44.1k → 48k after 0.8 s; Inferno and USB 16x16 already at 48k. `status`
   afterwards: every device 48k, Pulse LOCKED (state 3, stratum 41). The Pi's endpoint
   stayed up through it (start check still `ok`).
-MenuBarExtra UI, settings (MH device picker, exclude list, timings), SyncCoordinator,
-notifications, "Sync now", launch-at-login (`SMAppService`), log view.
+**2026-10-31: the Dante interface moved, and `dante-sync` now runs beside DVS.** The studio
+Mac's Dante NIC went from `en12` (suspected faulty) to `en7` (Thunderbolt Ethernet, DHCP with a
+self-assigned 169.254 address); `en7` is now the default of `dante-sync` and
+`scripts/dvs_set_rate.py`. With DVS running on `en7`, every call failed with `bind *:8708:
+Address already in use`: DVS's `conmon_server` holds 224.0.0.233:8708 and 224.0.0.231:8702
+with SO_REUSEADDR only, and the BSD stack counts SO_REUSEADDR as sharing only for a bind to a
+multicast address. The two listeners now bind their group address, not `*`; with DVS running,
+`status` lists DVS and `sync --dry-run` plans it. Not yet run: a live rate move with DVS up.
+
+MenuBarExtra UI, settings (MH device picker, exclude list, timings, **Dante network
+interface**), SyncCoordinator, notifications, "Sync now", launch-at-login (`SMAppService`),
+log view.
+- **Interface picker.** The interface is a setting, not a constant: the NIC has already moved
+  once (`en12` to `en7`, 2026-10-31), and BSD names follow the adapter and port. The picker lists
+  the up interfaces with an IPv4 address (`getifaddrs`, as `NetworkInterface.lookup` does),
+  showing each one's name, hardware port (`networksetup -listallhardwareports` or
+  `SCNetworkInterfaceCopyAll`), address, and which Dante devices answer heartbeats on it, and
+  marks the ones on 169.254/16. The choice is stored by the adapter's MAC as well as its BSD
+  name, so a renumbered adapter is found again; if the stored one is gone or has no address,
+  the app stops syncing and says so in the menu, rather than falling back to another
+  interface. Changing it closes and reopens `DanteNetwork` (its sockets are bound to the
+  interface's address and group memberships). The CLI keeps `--interface`, with the app's
+  stored choice as its default once the app exists.
 
 ### Phase 4 — Ship
 Developer ID signing, hardened runtime, notarization, DMG, using the
@@ -283,7 +304,8 @@ local-network privacy prompt).
 
 ## Open questions for you
 1. Which Mac will run this? Is it the one running DVS (Bryans-MacBook-Pro), and which
-   network interface carries Dante?
+   network interface carries Dante? (2026-10-31: the studio Mac, `en7`; the app lets the user
+   choose it, Phase 3.)
 2. ~~Is the Inferno USB 16x16 your own build? Should it follow, or go on the exclude list?~~
    Answered 2026-10-16: yes, and it follows (Dante side and USB side), and this app owns the
    Mac side of its rate changes.

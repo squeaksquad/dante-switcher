@@ -47,7 +47,7 @@ def set_rate_packet(mac, rate, sequence):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("rate", type=int, choices=RATES)
-    parser.add_argument("--interface", default="en12", help="DVS's Dante interface")
+    parser.add_argument("--interface", default="en7", help="DVS's Dante interface")
     parser.add_argument("--port", type=int, default=38700, help="DVS settings port")
     parser.add_argument("--src-port", type=int, default=0, help="local source port (Dante Controller uses 8700)")
     parser.add_argument("--wait", type=float, default=30, help="seconds to wait for DVS to report the new rate")

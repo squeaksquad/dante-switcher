@@ -7,7 +7,8 @@ public struct SocketError: Error, CustomStringConvertible {
 }
 
 /// Minimal BSD UDP socket. Multicast listeners share their port with Dante's own daemons
-/// (DVS binds 8708/8702 too), so SO_REUSEPORT is always set.
+/// (DVS binds 8708/8702 too), so SO_REUSEPORT is always set, and they bind the group address
+/// itself so that a daemon holding the port with SO_REUSEADDR alone still lets them in.
 final class UDPSocket {
     private let fd: Int32
     private var source: DispatchSourceRead?
