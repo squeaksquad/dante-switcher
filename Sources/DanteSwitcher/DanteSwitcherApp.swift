@@ -45,6 +45,8 @@ struct MenuContent: View {
 }
 
 /// A menu section with a heading (the menu draws its separators); nothing when it has no rows.
+/// The rows are buttons that do nothing: a plain Text item is drawn disabled, in the same gray
+/// as the heading, so the heading would not stand out.
 struct DeviceSection: View {
     let title: String
     let rows: [RateMonitor.Row]
@@ -53,7 +55,7 @@ struct DeviceSection: View {
         if !rows.isEmpty {
             Section(title) {
                 ForEach(rows) { row in
-                    Text("\(row.label)   \(row.rate)" + (row.mark.isEmpty ? "" : "   \(row.mark)"))
+                    Button("\(row.label)   \(row.rate)" + (row.mark.isEmpty ? "" : "   \(row.mark)")) {}
                 }
             }
         }

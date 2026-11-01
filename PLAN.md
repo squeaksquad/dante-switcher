@@ -318,11 +318,13 @@ the interface every second and reopens `DanteNetwork` when the address changes o
   does that) but no heartbeats, so every Dante rate is "—", without an error. From a shell it
   inherits the shell's permission and works. The app has to be allowed in System Settings →
   Privacy & Security → Local Network. Once allowed, the `open`-launched app showed the same
-  rates. A rebuild lost the grant again, Developer ID signature and all: macOS tracks it by the
-  main executable's Mach-O UUID, which changes with every code change, so each new build needs
-  allowing again (or, while developing, run the binary from a shell).
+  rates. After a rebuild, the first launch of the new binary can hear no heartbeats (Dante rows
+  "—" still at 75 s) with no prompt shown; quitting and reopening it fixes that, with no new grant
+  (2026-10-31, twice). Likely macOS evaluating the new executable on its first run; not
+  investigated. So after `scripts/build_app.sh`, launch, quit, and launch again.
 - The menu lists the Dante devices and the CoreAudio devices (Metric Halo, USB-AoIP) under
-  their own section headings.
+  their own section headings. Device rows are no-op buttons, so they draw in the normal text
+  color and the gray headings stand apart.
 
 MenuBarExtra UI, settings (MH device picker, exclude list, timings, **Dante network
 interface**), SyncCoordinator, notifications, "Sync now", launch-at-login (`SMAppService`),
