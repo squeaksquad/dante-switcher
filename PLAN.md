@@ -397,9 +397,13 @@ For moving to a new Mac, a reinstall, or handing a working setup to someone else
 - **Open:** whether to keep an automatic copy (say, the last five configs in Application
   Support, saved on every change) so a bad restore can be undone without a manual backup.
 
-#### Planned: a "Launch at Login" toggle
-Not built. A toggle in the menu, next to Follow Rate Changes, through `SMAppService.mainApp`
-(macOS 13+; no helper app or launchd plist).
+#### Built 2026-10-31: a "Launch at Login" toggle
+A toggle in the menu's settings group (with Rate Sources, the leader and the interface: it is a
+setting, not an action like Follow), through `SMAppService.mainApp` (macOS 13+; no helper app or
+launchd plist). Checked 2026-10-31: in `build/` the toggle is disabled with "Move Dante Switcher
+to Applications…"; installed by `scripts/build_app.sh --install`, it is enabled and off, and the
+installed copy heard the network with no new local network prompt. Not yet checked: turning it
+on, a logout and login, and turning it off in System Settings. The plan as built:
 - **The system owns the state, not the app.** The toggle reads `SMAppService.mainApp.status`
   each time the menu opens, and never a stored flag: the user can turn the login item off in
   System Settings → General → Login Items, and the menu must show that. On calls `register()`,

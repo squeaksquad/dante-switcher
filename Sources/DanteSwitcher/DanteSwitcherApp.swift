@@ -1,4 +1,5 @@
 import DanteSyncCore
+import ServiceManagement
 import SwiftUI
 
 @main
@@ -63,6 +64,7 @@ struct MenuContent: View {
             }
         }
         Section {
+            LaunchAtLogin(monitor: monitor)
             SourcesMenu(monitor: monitor)
             LeaderMenu(monitor: monitor)
         Picker("Dante Interface", selection: $monitor.interfaceName) {
@@ -174,5 +176,22 @@ struct LogView: View {
             .onChange(of: monitor.log.count) { proxy.scrollTo("end") }
         }
         .frame(minWidth: 560, minHeight: 320)
+    }
+}
+
+/// On while macOS has the login item enabled or waiting for approval; off otherwise.
+struct LaunchAtLogin: View {
+    let monitor: RateMonitor
+
+    var body: some View {
+        let pending = monitor.loginStatus == .requiresApproval
+        Toggle("Launch at Login" + (pending ? " (approve in System Settings)" : ""),
+               isOn: Binding(get: { monitor.loginStatus == .enabled || pending }, set: { monitor.setLaunchAtLogin($0) }))
+            .disabled(!monitor.isInstalled)
+        if !monitor.isInstalled {
+            Text("Move Dante Switcher to Applications to launch it at login")
+        } else if pending {
+            Button("Open Login Items Settings…") { SMAppService.openSystemSettingsLoginItems() }
+        }
     }
 }

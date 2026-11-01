@@ -1,6 +1,7 @@
 import DanteSyncCore
 import Foundation
 import Observation
+import ServiceManagement
 
 /// Listens to the Dante heartbeats and reads the chosen CoreAudio rate sources once a second.
 /// Sets rates only when following is on (`RateWatcher`, as `dante-sync watch`) or on "Sync Now".
@@ -49,6 +50,13 @@ final class RateMonitor {
     /// The sync log, newest last, capped.
     private(set) var log: [String] = []
 
+    /// The login item's state as macOS has it, re-read every second: the user can turn it off in
+    /// System Settings → General → Login Items, so no flag is stored here.
+    private(set) var loginStatus = SMAppService.mainApp.status
+    /// A login item points at the app's path, so only an installed copy may register one:
+    /// a copy in `build/` is replaced by the next build.
+    let isInstalled = Bundle.main.bundleURL.path.hasPrefix("/Applications/")
+
     private(set) var networkRate = NetworkRate(readings: [], leaderMatch: nil, now: Date())
     private(set) var rows: [Row] = []
     /// Set when the network isn't open, in place of the rows.
@@ -82,6 +90,7 @@ final class RateMonitor {
     var title: String { problem == nil ? networkRate.title : "—" }
 
     func refresh() {
+        loginStatus = SMAppService.mainApp.status
         interfaces = NetworkInterface.all()
         audioDevices = CoreAudioRate.devices()
         // The sockets are bound to the interface's address, so a new address (sleep/wake, a cable
@@ -174,6 +183,15 @@ final class RateMonitor {
     func setClocksNetwork(_ source: RateSource, _ on: Bool) {
         guard let index = sources.firstIndex(of: source) else { return }
         sources[index].clocksNetwork = on
+    }
+
+    func setLaunchAtLogin(_ on: Bool) {
+        do {
+            if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
+        } catch {
+            append("Launch at Login \(on ? "on" : "off") failed: \(error.localizedDescription)")
+        }
+        loginStatus = SMAppService.mainApp.status
     }
 
     func setLeader(_ device: DanteNetwork.Device?) {

@@ -3,6 +3,8 @@
 # Signed from the first build: macOS keys the local-network permission to the signature, and an
 # ad-hoc build loses it on every rebuild (the heartbeat listeners then hear nothing, with no error).
 # Not notarized yet (Phase 4).
+# --install also copies it to /Applications, the only place Launch at Login is offered: a login
+# item points at the app's path, and the copy in build/ is replaced by every build.
 set -euo pipefail
 cd "${0:A:h}/.."
 
@@ -38,3 +40,10 @@ PLIST
 codesign --force --options runtime --timestamp --sign "$IDENTITY" "$APP"
 codesign --verify --deep --strict --verbose=2 "$APP"
 echo "Built $APP"
+
+if [[ "${1:-}" == "--install" ]]; then
+    pkill -x DanteSwitcher || true
+    rm -rf /Applications/DanteSwitcher.app
+    ditto "$APP" /Applications/DanteSwitcher.app
+    echo "Installed /Applications/DanteSwitcher.app"
+fi
