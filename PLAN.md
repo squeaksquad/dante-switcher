@@ -290,8 +290,16 @@ is broken, so the band-up refusal no longer applies to a follow: `sync` without 
 `watch` (it passes the rate it saw with `followsSource`). The follow prints a note that channel
 counts may drop (at 96k the Pulse has 32 Dante channels each way, not 64; the routing fits).
 An explicit `--rate` into a higher band still needs `--allow-band-up`; on a follow the flag is
-accepted and does nothing. `BandUpCheck` decides, tested in `BandUpCheckTests`. Not yet run
-live.
+accepted and does nothing. `BandUpCheck` decides, tested in `BandUpCheckTests`.
+Run live 2026-10-31, Pro Tools closed, DVS up, the USB-AoIP set by CoreAudio as a DAW would:
+- 48k → 96k, `sync --source usb-aoip`, no flag: the note printed, then the MH, Pulse (locked),
+  DVS and D2USB moved and verified in 0.2–3.2 s; the Pi's Dante side was already at 96k (it
+  follows its gadget). Exit 0.
+- 96k → 48k the same way: all moved except the Pi's Dante side, reported "still 96k after
+  20 s" (exit 1). A `status` straight after showed it at 48k, as were the rest. So when the Pi
+  moves its Dante side itself, the sync's set, sent because discovery still saw 96k, races
+  that move, and its heartbeat lags past the 20 s verify. Not yet investigated; the USB-AoIP
+  repo owns the Pi side.
 
 MenuBarExtra UI, settings (MH device picker, exclude list, timings, **Dante network
 interface**), SyncCoordinator, notifications, "Sync now", launch-at-login (`SMAppService`),
