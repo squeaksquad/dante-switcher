@@ -84,6 +84,23 @@ public struct NetworkInterface {
     public let ipv4: String
     public let mac: [UInt8]
 
+    /// Every interface with an IPv4 address and a MAC, for the app's interface menu.
+    public static func all() -> [NetworkInterface] {
+        var list: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&list) == 0 else { return [] }
+        defer { freeifaddrs(list) }
+        var names: [String] = []
+        var cursor = list
+        while let entry = cursor {
+            let name = String(cString: entry.pointee.ifa_name)
+            if !names.contains(name) { names.append(name) }
+            cursor = entry.pointee.ifa_next
+        }
+        return names.compactMap(lookup)
+    }
+
+    public var isLinkLocal: Bool { ipv4.hasPrefix("169.254.") }
+
     public static func lookup(_ name: String) -> NetworkInterface? {
         var list: UnsafeMutablePointer<ifaddrs>?
         guard getifaddrs(&list) == 0 else { return nil }

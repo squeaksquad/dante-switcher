@@ -301,6 +301,29 @@ Run live 2026-10-31, Pro Tools closed, DVS up, the USB-AoIP set by CoreAudio as 
   that move, and its heartbeat lags past the 20 s verify. Not yet investigated; the USB-AoIP
   repo owns the Pi side.
 
+**Step 3 started (2026-10-31): a read-only menu bar app, `DanteSwitcher.app`.** The
+`DanteSwitcher` target (SwiftUI `MenuBarExtra`), bundled and signed with the Developer ID by
+`scripts/build_app.sh` into `build/DanteSwitcher.app` (not notarized). It sends no settings
+packets and sets no rate. The title is the network's rate: the leader's (Pulse's) heartbeat
+rate, or without a fresh leader the most common rate (a tie goes to the higher one), plus ⚠
+when any fresh device (Dante or CoreAudio) disagrees, or "—" when nothing is heard. A device
+whose last heartbeat is over 5 s old is marked "no heartbeat" and counts for neither.
+`NetworkRate` decides, tested in `NetworkRateTests`. The menu lists every device's rate and a
+Dante interface picker (by BSD name only for now; storing the MAC is still to do). It re-reads
+the interface every second and reopens `DanteNetwork` when the address changes or comes back.
+- Checked 2026-10-31 with DVS up, run as `build/DanteSwitcher.app/Contents/MacOS/DanteSwitcher`
+  from a shell: title `48k`, "Network 48k, from FF-PULSE-16-DX", every device at 48k, matching
+  `dante-sync status`.
+- **Local network privacy:** launched with `open`, the same build gets mDNS names (mDNSResponder
+  does that) but no heartbeats, so every Dante rate is "—", without an error. From a shell it
+  inherits the shell's permission and works. The app has to be allowed in System Settings →
+  Privacy & Security → Local Network. Once allowed, the `open`-launched app showed the same
+  rates. A rebuild lost the grant again, Developer ID signature and all: macOS tracks it by the
+  main executable's Mach-O UUID, which changes with every code change, so each new build needs
+  allowing again (or, while developing, run the binary from a shell).
+- The menu lists the Dante devices and the CoreAudio devices (Metric Halo, USB-AoIP) under
+  their own section headings.
+
 MenuBarExtra UI, settings (MH device picker, exclude list, timings, **Dante network
 interface**), SyncCoordinator, notifications, "Sync now", launch-at-login (`SMAppService`),
 log view.
