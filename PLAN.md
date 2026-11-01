@@ -353,7 +353,7 @@ app is meant for other people too, so device roles are choices, not constants:
   CoreAudio list; the rest stay alphabetical (Dante) or in the order chosen (CoreAudio).
 
 MenuBarExtra UI, settings (MH device picker, exclude list, timings, **Dante network
-interface**), SyncCoordinator, notifications, "Sync now", launch-at-login (`SMAppService`),
+interface**), SyncCoordinator, notifications, "Sync now", launch-at-login (planned below),
 log view.
 - **Interface picker.** The interface is a setting, not a constant: the NIC has already moved
   once (`en12` to `en7`, 2026-10-31), and BSD names follow the adapter and port. The picker lists
@@ -396,6 +396,31 @@ For moving to a new Mac, a reinstall, or handing a working setup to someone else
   command line win.
 - **Open:** whether to keep an automatic copy (say, the last five configs in Application
   Support, saved on every change) so a bad restore can be undone without a manual backup.
+
+#### Planned: a "Launch at Login" toggle
+Not built. A toggle in the menu, next to Follow Rate Changes, through `SMAppService.mainApp`
+(macOS 13+; no helper app or launchd plist).
+- **The system owns the state, not the app.** The toggle reads `SMAppService.mainApp.status`
+  each time the menu opens, and never a stored flag: the user can turn the login item off in
+  System Settings → General → Login Items, and the menu must show that. On calls `register()`,
+  off calls `unregister()`; an error goes to the log and the toggle shows the real status.
+- **`.requiresApproval`:** macOS can list the item as needing the user's OK. The toggle then
+  shows on with "(approve in System Settings)", and a button opens the pane
+  (`SMAppService.openSystemSettingsLoginItems()`).
+- **Where the app lives.** The login item points at the app's path, so it should run from
+  `/Applications`. A build launched from `build/` would register that copy and the next rebuild
+  replaces it. So the toggle is disabled outside `/Applications` and says why, and
+  `scripts/build_app.sh` gets an optional `--install` that copies the signed app there (`ditto`,
+  so the signature survives). Distribution (Phase 4) installs it there anyway.
+- **Off by default,** and not in the backup file: it belongs to this Mac's login, not the setup,
+  and a restore on someone else's Mac shouldn't add a login item.
+- **At login:** the app starts with Follow as it was left, so a studio Mac that boots with Follow
+  on keeps following without anyone opening the menu. Worth checking then: the Dante interface
+  may not have its address yet at login, which the once-a-second reopen already covers, and the
+  first launch after an update may hear no heartbeats until relaunched (the local network
+  privacy quirk above).
+- **Check by hand** (`SMAppService` isn't unit-testable here): turn it on, log out and in, see
+  the icon come up; turn it off in System Settings, open the menu, see the toggle off.
 
 ### Phase 4 — Ship
 Developer ID signing, hardened runtime, notarization, DMG, using the
