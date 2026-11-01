@@ -345,9 +345,12 @@ app is meant for other people too, so device roles are choices, not constants:
   `source` and an optional `leaderMatch`. The CLI keeps its flags, with the Metric Halo
   (clocks) and the USB-AoIP as its sources: `--source mh|usb-aoip`, `--leave-master` and
   `--no-usb` drop one, `--leader` matches an ID or a name. Dry runs on 2026-10-31 plan as before.
-- Checked 2026-10-31 by reading the menus (no source or leader chosen, nothing set). Not yet
-  run: a follow or a Sync Now from the app. The source list also shows virtual devices (Pro
-  Tools Audio Bridge, aggregates, display audio).
+- Checked 2026-10-31 by reading the menus (no source or leader chosen, nothing set). Then Bryan
+  chose the sources and the Pulse as leader, and a Sync Now at 23:04 reported 5 already at rate
+  (nothing to move). Not yet run: a follow, or a Sync Now that moves a rate. The source list also
+  shows virtual devices (Pro Tools Audio Bridge, aggregates, display audio); left so on purpose.
+- The chosen leader heads the Dante list and the sources that clock the network head the
+  CoreAudio list; the rest stay alphabetical (Dante) or in the order chosen (CoreAudio).
 
 MenuBarExtra UI, settings (MH device picker, exclude list, timings, **Dante network
 interface**), SyncCoordinator, notifications, "Sync now", launch-at-login (`SMAppService`),
@@ -363,6 +366,36 @@ log view.
   interface. Changing it closes and reopens `DanteNetwork` (its sockets are bound to the
   interface's address and group memberships). The CLI keeps `--interface`, with the app's
   stored choice as its default once the app exists.
+
+#### Planned: back up and restore the configuration
+For moving to a new Mac, a reinstall, or handing a working setup to someone else. Not built.
+- **What's in it.** Everything the app stores today: the rate sources (name, UID match,
+  clocks-the-network), the leader (device ID and name, or none), the Dante interface (BSD name,
+  plus the MAC once the picker stores it), and Follow Rate Changes. Later settings (exclude list,
+  timings) join it as they arrive. Nothing secret is stored, so the file needs no protection.
+- **Format.** One JSON file, `*.danteswitcher.json`, from a `Codable` `AppConfig` with a `version`
+  field (1). The app moves its own storage onto `AppConfig` too, as one UserDefaults key in place
+  of the five it has now, so the backup and the live settings can't drift apart.
+- **Menu.** A "Settings" submenu: "Back Up Settings…" (`NSSavePanel`, default name with the date)
+  and "Restore Settings…" (`NSOpenPanel`). The app is a menu bar app, so it activates itself
+  before showing a panel, as "Show Log…" does.
+- **Restoring is checked, not trusted.** A file that doesn't parse, or has a newer `version`
+  than the app knows, is refused with the reason, and nothing changes. Fields the app doesn't
+  know are ignored; missing ones keep their defaults. Before applying, a confirmation lists what
+  will change (sources, leader, interface) and anything not found on this Mac: a source not in
+  CoreAudio stays chosen and shows as "(not connected)", a leader not heard shows as "(not
+  heard)", an interface missing here falls back to the stored one's MAC match, else to none
+  with the menu saying so (never a guess at another interface, as with the picker).
+- **Follow is off after a restore,** whatever the file says. Turning it on moves every device,
+  so the user turns it on once the restored setup looks right. The confirmation says so.
+- **Tests:** `AppConfig` round-trips; a version-2 file is refused; an unknown field is ignored;
+  a file missing the leader restores with none; the "will change" summary for a config against
+  the current one.
+- **CLI, optional:** `dante-sync --config FILE` reads the same file for sources, leader and
+  interface, so a backup also drives `watch` on a machine without the app. Flags given on the
+  command line win.
+- **Open:** whether to keep an automatic copy (say, the last five configs in Application
+  Support, saved on every change) so a bad restore can be undone without a manual backup.
 
 ### Phase 4 — Ship
 Developer ID signing, hardened runtime, notarization, DMG, using the

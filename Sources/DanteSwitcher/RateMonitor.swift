@@ -136,7 +136,11 @@ final class RateMonitor {
 
         let mismatched = Set(networkRate.mismatched.map(\.label))
         let stale = Set(networkRate.stale.map(\.label))
-        rows = readings.map { reading in
+        // The leader heads the Dante list and the sources that clock the network head the CoreAudio
+        // list; the rest keep their order (Dante alphabetical, CoreAudio as chosen).
+        let clocking = Set(sources.filter(\.clocksNetwork).map { "\($0.name) (CoreAudio)" })
+        let first = readings.filter { $0.label == leaderLabel || clocking.contains($0.label) }
+        rows = (first + readings.filter { !first.contains($0) }).map { reading in
             let mark = reading.label == networkRate.leader ? "leader"
                 : stale.contains(reading.label) ? "no heartbeat"
                 : mismatched.contains(reading.label) ? "⚠" : ""
