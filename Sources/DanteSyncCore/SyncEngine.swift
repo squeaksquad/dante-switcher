@@ -233,13 +233,13 @@ public final class SyncEngine {
     private func planCoreAudio(_ target: Int, _ device: CoreAudioRate.Device) -> DeviceResult {
         let current = CoreAudioRate.nominalRate(of: device)
         if current == target {
-            return .init(device: device.name, outcome: .alreadyAtRate, detail: formatRate(target))
+            return .init(device: device.resultLabel, outcome: .alreadyAtRate, detail: formatRate(target))
         }
         let offered = CoreAudioRate.availableRates(of: device)
         let from = current.map(formatRate) ?? "?"
         return offered.contains(target)
-            ? .init(device: device.name, outcome: .planned, detail: "\(from) → \(formatRate(target)) via CoreAudio")
-            : .init(device: device.name, outcome: .planned, detail: "\(from) → \(formatRate(target)) via CoreAudio, but it offers only "
+            ? .init(device: device.resultLabel, outcome: .planned, detail: "\(from) → \(formatRate(target)) via CoreAudio")
+            : .init(device: device.resultLabel, outcome: .planned, detail: "\(from) → \(formatRate(target)) via CoreAudio, but it offers only "
                     + offered.map(formatRate).joined(separator: ", ") + " (would fail)")
     }
 
@@ -249,27 +249,27 @@ public final class SyncEngine {
                                 settle: TimeInterval = 0) async -> DeviceResult {
         let current = CoreAudioRate.nominalRate(of: device)
         if current == target {
-            return .init(device: device.name, outcome: .alreadyAtRate, detail: formatRate(target))
+            return .init(device: device.resultLabel, outcome: .alreadyAtRate, detail: formatRate(target))
         }
         let sentAt = Date()
         do {
             try CoreAudioRate.setNominalRate(target, on: device)
         } catch {
-            return .init(device: device.name, outcome: .failed, detail: "\(error)")
+            return .init(device: device.resultLabel, outcome: .failed, detail: "\(error)")
         }
         log("Set \(device.name) \(current.map(formatRate) ?? "?") → \(formatRate(target)) (CoreAudio)")
         if await CoreAudioRate.waitForRate(target, uid: device.uid, timeout: timeout) {
             let seconds = String(format: "%.1f", Date().timeIntervalSince(sentAt))
             let hold = CoreAudioRate.settleTime(target, uid: device.uid, usb882Settle: settle)
             guard hold > 0 else {
-                return .init(device: device.name, outcome: .changed, detail: "verified by CoreAudio after \(seconds) s")
+                return .init(device: device.resultLabel, outcome: .changed, detail: "verified by CoreAudio after \(seconds) s")
             }
             log("\(device.name) at \(formatRate(target)): holding \(Int(hold)) s before reporting; start audio on it only after this sync finishes")
             try? await Task.sleep(nanoseconds: UInt64(hold * 1e9))
-            return .init(device: device.name, outcome: .changed,
+            return .init(device: device.resultLabel, outcome: .changed,
                          detail: "verified by CoreAudio after \(seconds) s, then held \(Int(hold)) s (88.2k settle)")
         }
-        return .init(device: device.name, outcome: .failed, detail: "still not \(formatRate(target)) after \(Int(timeout)) s")
+        return .init(device: device.resultLabel, outcome: .failed, detail: "still not \(formatRate(target)) after \(Int(timeout)) s")
     }
 
     /// Sends the set packet to every device that needs it, then waits for each heartbeat to show the new rate.

@@ -33,6 +33,10 @@ public enum CoreAudioRate {
         public let id: AudioObjectID
         public let name: String
         public let uid: String
+
+        /// Its name in sync results, told apart from a Dante device of the same name (the Pi's
+        /// gadget and its Dante side are both USB-AoIP).
+        public var resultLabel: String { "\(name) (CoreAudio)" }
     }
 
     public static func findDevice(uidPrefix: String = metricHaloUIDPrefix) -> Device? {

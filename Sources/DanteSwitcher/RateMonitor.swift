@@ -220,6 +220,9 @@ final class RateMonitor {
         syncing = false
         lastReport = report
         lastReportAt = Date()
+        for result in report.results {
+            append("  \(result.device): \(result.outcome.rawValue), \(result.detail)")
+        }
         append(report.summary)
     }
 

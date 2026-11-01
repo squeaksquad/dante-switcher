@@ -11,6 +11,9 @@ struct DanteSwitcherApp: App {
         } label: {
             Text(monitor.title).monospacedDigit()
         }
+        Window("Dante Switcher Log", id: "log") {
+            LogView(monitor: monitor)
+        }
     }
 }
 
@@ -45,19 +48,18 @@ struct MenuContent: View {
                 }
                 .disabled(monitor.problem != nil)
             }
+            // Menu items don't wrap, so long text goes inside the submenu or the log window, not in a title.
             if let report = monitor.lastReport, let at = monitor.lastReportAt {
-                Menu("Last sync \(at.formatted(date: .omitted, time: .shortened)): \(report.summary)") {
+                Menu("Last Sync, \(at.formatted(date: .omitted, time: .shortened))") {
+                    Text(report.summary)
+                    Divider()
                     ForEach(Array(report.results.enumerated()), id: \.offset) { _, result in
                         Button("\(result.device)   \(result.outcome.rawValue)   \(result.detail)") {}
                     }
                 }
             }
             if !monitor.log.isEmpty {
-                Menu("Log") {
-                    ForEach(Array(monitor.log.suffix(40).enumerated()), id: \.offset) { _, line in
-                        Button(line) {}
-                    }
-                }
+                ShowLogButton()
             }
         }
         Section {
@@ -113,7 +115,7 @@ struct SourcesMenu: View {
                 }
             }
             if !monitor.sources.isEmpty {
-                Section("Clocks the Dante network (set first; the sync stops if it can't change)") {
+                Section("Clocks the Dante network") {
                     ForEach(monitor.sources, id: \.uidMatch) { source in
                         Toggle(source.name, isOn: Binding(get: { source.clocksNetwork }, set: { monitor.setClocksNetwork(source, $0) }))
                     }
@@ -139,5 +141,38 @@ struct LeaderMenu: View {
                 Toggle("\(name) (not heard)", isOn: .constant(true))
             }
         }
+    }
+}
+
+struct ShowLogButton: View {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Button("Show Log…") {
+            openWindow(id: "log")
+            // A menu bar app is never frontmost on its own, so the window would open behind others.
+            NSApplication.shared.activate(ignoringOtherApps: true)
+        }
+    }
+}
+
+/// The sync log, wrapped and selectable: menu items cut long lines off.
+struct LogView: View {
+    let monitor: RateMonitor
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                Text(monitor.log.joined(separator: "\n"))
+                    .font(.system(.body, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+                Color.clear.frame(height: 1).id("end")
+            }
+            .onAppear { proxy.scrollTo("end") }
+            .onChange(of: monitor.log.count) { proxy.scrollTo("end") }
+        }
+        .frame(minWidth: 560, minHeight: 320)
     }
 }
