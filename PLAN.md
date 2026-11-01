@@ -326,6 +326,29 @@ the interface every second and reopens `DanteNetwork` when the address changes o
   their own section headings. Device rows are no-op buttons, so they draw in the normal text
   color and the gray headings stand apart.
 
+**Step 4 (2026-10-31): the app follows and syncs, and nothing in it is studio-specific.** The
+app is meant for other people too, so device roles are choices, not constants:
+- **Rate sources:** any number of CoreAudio devices (menu "Rate Sources", every device offering
+  a Dante rate). A change on any of them is followed, and the others are set to match. Each has
+  "Clocks the Dante network": such a source is set and verified before any Dante device, and
+  the sync stops if it does not change (the Metric Halo, whose MADI clocks the Pulse). The others
+  are set alongside the Dante devices and a failure is only reported (the USB-AoIP). Stored as
+  `RateSource` (name, UID prefix, clocks flag); the Metric Halo and the USB-AoIP are matched by
+  family prefix (`CoreAudioRate.stableMatch`), any other device by its whole UID. None chosen
+  until the user picks; Follow is disabled until then.
+- **Dante clock leader:** picked from the devices heard, stored by device ID, or "None", in which
+  case every Dante device is set together with no lock wait (`SyncOptions.leaderMatch` nil).
+- **Follow Rate Changes** (off by default) runs `RateWatcher`, the loop `dante-sync watch` now
+  also runs. **Sync Network To ▸** syncs to one source's rate, with the watcher paused so the
+  sync's own sets are not followed. The menu shows the last sync's summary and results, and a log.
+- `SyncOptions` lost the `Source` enum, `followMaster` and `followUSB16x16` for `sources`,
+  `source` and an optional `leaderMatch`. The CLI keeps its flags, with the Metric Halo
+  (clocks) and the USB-AoIP as its sources: `--source mh|usb-aoip`, `--leave-master` and
+  `--no-usb` drop one, `--leader` matches an ID or a name. Dry runs on 2026-10-31 plan as before.
+- Checked 2026-10-31 by reading the menus (no source or leader chosen, nothing set). Not yet
+  run: a follow or a Sync Now from the app. The source list also shows virtual devices (Pro
+  Tools Audio Bridge, aggregates, display audio).
+
 MenuBarExtra UI, settings (MH device picker, exclude list, timings, **Dante network
 interface**), SyncCoordinator, notifications, "Sync now", launch-at-login (`SMAppService`),
 log view.

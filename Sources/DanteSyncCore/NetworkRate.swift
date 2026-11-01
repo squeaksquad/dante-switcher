@@ -17,7 +17,7 @@ public struct NetworkRate: Equatable {
         }
     }
 
-    /// The leader's rate; without a fresh leader, the most common fresh rate.
+    /// The leader's rate; without a fresh leader (or with none chosen), the most common fresh rate.
     public let rate: Int?
     /// Nil when the rate came from the majority.
     public let leader: String?
@@ -25,12 +25,12 @@ public struct NetworkRate: Equatable {
     /// Heard from once, but no heartbeat within `staleAfter`: left out of the rate and the mismatch.
     public let stale: [Reading]
 
-    public init(readings: [Reading], leaderMatch: String, now: Date, staleAfter: TimeInterval = 5) {
+    public init(readings: [Reading], leaderMatch: String?, now: Date, staleAfter: TimeInterval = 5) {
         let isFresh = { (reading: Reading) in reading.lastHeard.map { now.timeIntervalSince($0) <= staleAfter } ?? true }
         let fresh = readings.filter { isFresh($0) && $0.rate != nil }
         stale = readings.filter { !isFresh($0) }
 
-        let found = fresh.first { $0.label.localizedCaseInsensitiveContains(leaderMatch) }
+        let found = leaderMatch.flatMap { match in fresh.first { $0.label.localizedCaseInsensitiveContains(match) } }
         // Without a leader, ties go to the higher rate, so the answer doesn't depend on reading order.
         let counts = Dictionary(fresh.compactMap(\.rate).map { ($0, 1) }, uniquingKeysWith: +)
         let domainRate = found?.rate ?? counts.max { ($0.value, $0.key) < ($1.value, $1.key) }?.key

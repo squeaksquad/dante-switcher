@@ -33,6 +33,7 @@ arguments.removeFirst()
 
 var interfaceName = "en7"
 var options = SyncOptions()
+var leaveMaster = false
 while !arguments.isEmpty {
     let flag = arguments.removeFirst()
     func value() -> String {
@@ -46,12 +47,12 @@ while !arguments.isEmpty {
         options.targetRate = rate
     case "--source":
         switch value().lowercased() {
-        case "mh", "metric-halo", "metrichalo": options.source = .metricHalo
-        case "usb16x16", "usb", "usb-16x16", "usb-aoip": options.source = .usb16x16
-        default: print("--source is mh or usb16x16"); exit(2)
+        case "mh", "metric-halo", "metrichalo": options.source = RateSource.metricHalo.uidMatch
+        case "usb16x16", "usb", "usb-16x16", "usb-aoip": options.source = RateSource.usbAoIP.uidMatch
+        default: print("--source is mh or usb-aoip"); exit(2)
         }
-    case "--leave-master": options.followMaster = false
-    case "--no-usb": options.followUSB16x16 = false
+    case "--leave-master": leaveMaster = true
+    case "--no-usb": options.sources.removeAll { $0 == .usbAoIP && options.source != $0.uidMatch }
     case "--exclude": options.exclude.append(value())
     case "--leader": options.leaderMatch = value()
     case "--wait": options.discoveryWait = TimeInterval(value()) ?? options.discoveryWait
@@ -60,6 +61,11 @@ while !arguments.isEmpty {
     case "--allow-band-up": options.allowBandUp = true
     default: print("Unknown option \(flag)\n\n\(usage)"); exit(2)
     }
+}
+
+// After parsing, so --source given after --leave-master still counts.
+if leaveMaster {
+    options.sources.removeAll { $0 == .metricHalo && options.source != $0.uidMatch }
 }
 
 func log(_ message: String) {
@@ -88,20 +94,17 @@ log("Dante interface \(interfaceName) \(network.interface.ipv4) (\(mac))")
 
 switch command {
 case "status":
-    if let master = CoreAudioRate.findDevice() {
-        log("Clock master \(master.name): \(CoreAudioRate.nominalRate(of: master).map(formatRate) ?? "unknown")")
-    } else {
-        log("Clock master: no Metric Halo in CoreAudio")
-    }
-    if let usb = CoreAudioRate.findDevice(uidPrefix: CoreAudioRate.usb16x16UIDPrefix) {
-        log("\(usb.name): \(CoreAudioRate.nominalRate(of: usb).map(formatRate) ?? "unknown")"
-            + " (offers \(CoreAudioRate.availableRates(of: usb).map(formatRate).joined(separator: ", ")))")
-    } else {
-        log("USB-AoIP: not in CoreAudio")
+    for source in options.sources {
+        if let device = source.find() {
+            log("\(device.name): \(CoreAudioRate.nominalRate(of: device).map(formatRate) ?? "unknown")"
+                + " (offers \(CoreAudioRate.availableRates(of: device).map(formatRate).joined(separator: ", ")))")
+        } else {
+            log("\(source.name): not in CoreAudio")
+        }
     }
     try? await Task.sleep(nanoseconds: UInt64(options.discoveryWait * 1e9))
     let devices = network.snapshot()
-    if let leader = devices.first(where: { $0.label.localizedCaseInsensitiveContains(options.leaderMatch) }), let ip = leader.ip {
+    if let leader = devices.first(where: options.isLeader), let ip = leader.ip {
         let askedAt = Date()
         try? network.requestClockStatus(of: leader)
         try? await Task.sleep(nanoseconds: 1_000_000_000)
@@ -130,48 +133,7 @@ case "sync":
     exit(report.aborted == nil && !report.results.contains { $0.outcome == .failed } ? 0 : 1)
 
 case "watch":
-    func readings() -> [String: Int] {
-        var now: [String: Int] = [:]
-        for (source, prefix) in [(SyncOptions.Source.metricHalo, CoreAudioRate.metricHaloUIDPrefix),
-                                 (.usb16x16, CoreAudioRate.usb16x16UIDPrefix)] {
-            if let device = CoreAudioRate.findDevice(uidPrefix: prefix), let rate = CoreAudioRate.nominalRate(of: device) {
-                now[source.rawValue] = rate
-            }
-        }
-        return now
-    }
-    let start = readings()
-    log("Watching " + (start.isEmpty ? "(no Metric Halo or USB-AoIP yet)"
-        : start.sorted { $0.key < $1.key }.map { "\($0.key) \(formatRate($0.value))" }.joined(separator: ", "))
-        + (options.dryRun ? " — dry run, nothing is set" : ""))
-    if Set(start.values).count > 1 {
-        log("They disagree now; nothing is done until one of them changes.")
-    }
-    var follower = RateFollower(initial: start)
-    while true {
-        try? await Task.sleep(nanoseconds: 250_000_000)
-        for event in follower.observe(readings(), at: Date()) {
-            switch event {
-            case .ignored(let source, let rate, let reason):
-                log("\(source) → \(formatRate(rate)) not followed: \(reason)")
-            case .follow(let decision):
-                log("")
-                log("\(decision.source) changed to \(formatRate(decision.rate)); syncing everything else")
-                if decision.source == SyncOptions.Source.usb16x16.rawValue && decision.rate == 88200 {
-                    // The app that set it has likely started audio already, so no hold here can help.
-                    log("WARNING: an app set the USB-AoIP to 88.2k. If it started audio within a few seconds,"
-                        + " macOS may pass only silence on the USB-AoIP, both ways, until the rate is changed again."
-                        + " If so: stop audio on it, set it to 48k, wait 10 s, set 88.2k, wait 10 s, then start audio.")
-                }
-                var run = options
-                run.targetRate = decision.rate
-                run.followsSource = true
-                run.source = SyncOptions.Source(rawValue: decision.source) ?? .metricHalo
-                printReport(await SyncEngine(network: network, log: log).run(run))
-                follower.finished(readings(), at: Date())
-            }
-        }
-    }
+    await RateWatcher(network: network, options: options, log: log, report: printReport).run()
 
 default:
     break

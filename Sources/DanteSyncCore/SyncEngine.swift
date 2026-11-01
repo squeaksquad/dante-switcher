@@ -1,23 +1,16 @@
 import Foundation
 
 public struct SyncOptions {
-    /// The CoreAudio device whose rate the user changed. It is the target when `targetRate`
-    /// is nil, and it is the one CoreAudio device not set.
-    public enum Source: String {
-        case metricHalo = "Metric Halo"
-        case usb16x16 = "USB-AoIP"
-    }
-
-    /// Rate to apply; nil means read it from `source` via CoreAudio.
+    /// Rate to apply; nil means read it from the leading source via CoreAudio.
     public var targetRate: Int?
-    public var source = Source.metricHalo
-    /// Set the Metric Halo first when it is not the source: the Pulse locks to its MADI clock,
-    /// so the Pulse cannot settle at a rate the Metric Halo is not at.
-    public var followMaster = true
-    /// Set the USB 16x16 (the Pi's gadget) with the Dante followers.
-    public var followUSB16x16 = true
-    /// Case-insensitive substring identifying the clock leader (the Pulse 16 DX).
-    public var leaderMatch = "PULSE"
+    /// The CoreAudio devices that move the network; every one but the leading source is set.
+    public var sources: [RateSource] = [.metricHalo, .usbAoIP]
+    /// `uidMatch` of the source whose rate the user changed; nil means the first source.
+    public var source: String?
+    /// The clock leader (the Pulse 16 DX): a device ID (EUI-64), or a case-insensitive
+    /// substring of its name. It is set first and waited on for word-clock lock. Nil: no
+    /// leader, every Dante device is set together.
+    public var leaderMatch: String? = "PULSE"
     /// Case-insensitive substrings of device names (or IDs) that must not follow.
     public var exclude: [String] = []
     public var dryRun = false
@@ -40,6 +33,15 @@ public struct SyncOptions {
     public var lockTimeout: TimeInterval = 15
 
     public init() {}
+
+    public var leadingSource: RateSource? {
+        sources.first { $0.uidMatch == source } ?? sources.first
+    }
+
+    public func isLeader(_ device: DanteNetwork.Device) -> Bool {
+        guard let leaderMatch else { return false }
+        return device.id == leaderMatch.lowercased() || device.label.localizedCaseInsensitiveContains(leaderMatch)
+    }
 }
 
 public struct DeviceResult {
@@ -92,7 +94,7 @@ public struct BandUpCheck: Equatable {
         } else {
             abort = nil
             note = "NOTE: \(formatRate(target)) is a higher rate band than \(names); channel counts may drop"
-                + (follows ? " (following \(options.source.rawValue))" : "")
+                + (follows ? " (following \(options.leadingSource?.name ?? "the source"))" : "")
         }
     }
 }
@@ -115,8 +117,9 @@ public final class SyncEngine {
     public func run(_ options: SyncOptions) async -> SyncReport {
         var report = SyncReport()
 
-        guard let target = options.targetRate ?? sourceRate(options.source) else {
-            report.aborted = "no \(options.source.rawValue) found in CoreAudio and no --rate given"
+        guard let target = options.targetRate ?? options.leadingSource.flatMap(sourceRate) else {
+            report.aborted = options.leadingSource.map { "no \($0.name) found in CoreAudio and no --rate given" }
+                ?? "no rate source chosen and no --rate given"
             return report
         }
         guard SampleRate.all.contains(target) else {
@@ -134,38 +137,41 @@ public final class SyncEngine {
                 report.results.append(.init(device: device.label, outcome: .skipped, detail: "excluded"))
             } else if device.ip == nil || device.sampleRate == nil {
                 report.results.append(.init(device: device.label, outcome: .skipped, detail: "no heartbeat with a sample rate; can't set or verify"))
-            } else if leader == nil, device.label.localizedCaseInsensitiveContains(options.leaderMatch) {
+            } else if leader == nil, options.isLeader(device) {
                 leader = device
             } else {
                 followers.append(device)
             }
         }
-        guard let leader else {
-            report.aborted = "clock leader matching \"\(options.leaderMatch)\" not found; nothing changed"
+        if let match = options.leaderMatch, leader == nil {
+            report.aborted = "clock leader \"\(match)\" not found; nothing changed"
             return report
         }
+        let dante = (leader.map { [$0] } ?? []) + followers
 
-        let bandUp = BandUpCheck(target: target, devices: ([leader] + followers).map { ($0.label, $0.sampleRate!) },
-                                 options: options)
+        let bandUp = BandUpCheck(target: target, devices: dante.map { ($0.label, $0.sampleRate!) }, options: options)
         if let abort = bandUp.abort {
             report.aborted = abort
             return report
         }
         if let note = bandUp.note { log(note) }
 
-        let master = options.followMaster && options.source != .metricHalo
-            ? CoreAudioRate.findDevice(uidPrefix: CoreAudioRate.metricHaloUIDPrefix) : nil
-        let usb = options.followUSB16x16 && options.source != .usb16x16
-            ? CoreAudioRate.findDevice(uidPrefix: CoreAudioRate.usb16x16UIDPrefix) : nil
-        if options.followUSB16x16 && options.source != .usb16x16 && usb == nil {
-            report.results.append(.init(device: "USB-AoIP", outcome: .skipped, detail: "not in CoreAudio (gadget not connected)"))
+        // Every source but the leading one is set: the ones that clock the network first.
+        var clocking: [CoreAudioRate.Device] = []
+        var alongside: [CoreAudioRate.Device] = []
+        for source in options.sources where source.uidMatch != options.leadingSource?.uidMatch {
+            guard let device = source.find() else {
+                report.results.append(.init(device: source.name, outcome: .skipped, detail: "not in CoreAudio"))
+                continue
+            }
+            if source.clocksNetwork { clocking.append(device) } else { alongside.append(device) }
         }
 
         if options.dryRun {
-            for device in [master, usb].compactMap({ $0 }) {
+            for device in clocking + alongside {
                 report.results.append(planCoreAudio(target, device))
             }
-            for device in [leader] + followers {
+            for device in dante {
                 let current = device.sampleRate!
                 report.results.append(current == target
                     ? .init(device: device.label, outcome: .alreadyAtRate, detail: formatRate(current))
@@ -175,41 +181,50 @@ public final class SyncEngine {
             return report
         }
 
-        // 0. The clock master, when the change came from somewhere else.
-        if let master {
-            let result = await applyCoreAudio(target, to: master, timeout: options.rateTimeout)
+        // 0. The sources that clock the network, when the change came from somewhere else.
+        for device in clocking {
+            let result = await applyCoreAudio(target, to: device, timeout: options.rateTimeout)
             report.results.append(result)
             if result.outcome == .failed {
-                report.aborted = "clock master \(master.name) did not change; nothing else touched"
+                report.aborted = "\(device.name) clocks the network and did not change; nothing else touched"
                 return report
             }
         }
 
         // 1. Leader, then wait until it reports the word clock locked at the new rate.
-        let leaderResult = await apply(target, to: [leader], timeout: options.rateTimeout)
-        report.results += leaderResult
-        if leaderResult.first?.outcome == .failed {
-            report.aborted = "leader \(leader.label) did not change; followers left alone"
-            return report
-        }
-        if await waitForLock(leader, timeout: options.lockTimeout) {
-            log("\(leader.label) word clock locked.")
-        } else {
-            log("WARNING: \(leader.label) did not report word clock lock within \(Int(options.lockTimeout)) s; continuing.")
+        if let leader {
+            let leaderResult = await apply(target, to: [leader], timeout: options.rateTimeout)
+            report.results += leaderResult
+            if leaderResult.first?.outcome == .failed {
+                report.aborted = "leader \(leader.label) did not change; followers left alone"
+                return report
+            }
+            if await waitForLock(leader, timeout: options.lockTimeout) {
+                log("\(leader.label) word clock locked.")
+            } else {
+                log("WARNING: \(leader.label) did not report word clock lock within \(Int(options.lockTimeout)) s; continuing.")
+            }
         }
 
-        // 2. Everyone else in parallel, the USB 16x16 with them: the Pi takes its Dante set
-        // and its gadget's rate as one change.
-        async let usbResult: DeviceResult? = usb == nil ? nil
-            : applyCoreAudio(target, to: usb!, timeout: options.rateTimeout, settle: options.usb882Settle)
+        // 2. Everyone else in parallel, the other sources with them: the USB-AoIP's Pi takes its
+        // Dante set and its gadget's rate as one change.
+        let settle = options.usb882Settle
+        let others = alongside
+        async let sourceResults: [DeviceResult] = withTaskGroup(of: DeviceResult.self) { group in
+            for device in others {
+                group.addTask { await self.applyCoreAudio(target, to: device, timeout: options.rateTimeout, settle: settle) }
+            }
+            var results: [DeviceResult] = []
+            for await result in group { results.append(result) }
+            return results
+        }
         report.results += await apply(target, to: followers, timeout: options.rateTimeout)
-        if let result = await usbResult { report.results.append(result) }
+        report.results += await sourceResults
         return report
     }
 
-    private func sourceRate(_ source: SyncOptions.Source) -> Int? {
-        let prefix = source == .metricHalo ? CoreAudioRate.metricHaloUIDPrefix : CoreAudioRate.usb16x16UIDPrefix
-        guard let device = CoreAudioRate.findDevice(uidPrefix: prefix) else { return nil }
+    private func sourceRate(_ source: RateSource) -> Int? {
+        guard let device = source.find() else { return nil }
         let rate = CoreAudioRate.nominalRate(of: device)
         log("\(device.name): \(rate.map(formatRate) ?? "unknown")")
         return rate

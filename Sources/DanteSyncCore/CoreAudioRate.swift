@@ -45,6 +45,18 @@ public enum CoreAudioRate {
         return nil
     }
 
+    /// Every device that offers at least one Dante rate, for the app's rate-source menu.
+    public static func devices() -> [Device] {
+        allDevices().map { Device(id: $0, name: string($0, kAudioObjectPropertyName), uid: string($0, kAudioDevicePropertyDeviceUID)) }
+            .filter { !$0.uid.isEmpty && !availableRates(of: $0).isEmpty }
+    }
+
+    /// What to store to find this device again: its family's prefix for the Metric Halo and the
+    /// USB-AoIP (their UIDs change with serial, interfaces, or the gadget's name), else the whole UID.
+    public static func stableMatch(for uid: String) -> String {
+        [metricHaloUIDPrefix, usb16x16UIDPrefix].first { self.uid(uid, matches: $0) } ?? uid
+    }
+
     public static func nominalRate(of device: Device) -> Int? {
         var address = globalAddress(kAudioDevicePropertyNominalSampleRate)
         var rate = Float64(0)

@@ -30,6 +30,39 @@ struct MenuContent: View {
         }
         DeviceSection(title: "Dante", rows: monitor.rows.filter { !$0.isCoreAudio })
         DeviceSection(title: "CoreAudio", rows: monitor.rows.filter(\.isCoreAudio))
+        Section {
+            Toggle("Follow Rate Changes", isOn: $monitor.follow)
+                .disabled(monitor.sources.isEmpty)
+            if monitor.sources.isEmpty {
+                Text("Choose a rate source to follow or sync")
+            } else if monitor.syncing {
+                Text("Syncing…")
+            } else {
+                Menu("Sync Network To") {
+                    ForEach(monitor.sources, id: \.uidMatch) { source in
+                        Button(source.name) { monitor.syncNow(to: source) }
+                    }
+                }
+                .disabled(monitor.problem != nil)
+            }
+            if let report = monitor.lastReport, let at = monitor.lastReportAt {
+                Menu("Last sync \(at.formatted(date: .omitted, time: .shortened)): \(report.summary)") {
+                    ForEach(Array(report.results.enumerated()), id: \.offset) { _, result in
+                        Button("\(result.device)   \(result.outcome.rawValue)   \(result.detail)") {}
+                    }
+                }
+            }
+            if !monitor.log.isEmpty {
+                Menu("Log") {
+                    ForEach(Array(monitor.log.suffix(40).enumerated()), id: \.offset) { _, line in
+                        Button(line) {}
+                    }
+                }
+            }
+        }
+        Section {
+            SourcesMenu(monitor: monitor)
+            LeaderMenu(monitor: monitor)
         Picker("Dante Interface", selection: $monitor.interfaceName) {
             ForEach(monitor.interfaces, id: \.name) { interface in
                 Text("\(interface.name)  \(interface.ipv4)" + (interface.isLinkLocal ? "  (link-local)" : "")).tag(interface.name)
@@ -37,6 +70,7 @@ struct MenuContent: View {
             if !monitor.interfaces.contains(where: { $0.name == monitor.interfaceName }) {
                 Text("\(monitor.interfaceName)  (no address)").tag(monitor.interfaceName)
             }
+        }
         }
         Divider()
         Button("Quit Dante Switcher") { NSApplication.shared.terminate(nil) }
@@ -57,6 +91,52 @@ struct DeviceSection: View {
                 ForEach(rows) { row in
                     Button("\(row.label)   \(row.rate)" + (row.mark.isEmpty ? "" : "   \(row.mark)")) {}
                 }
+            }
+        }
+    }
+}
+
+/// Which CoreAudio devices move the network, and which of them clocks it.
+struct SourcesMenu: View {
+    let monitor: RateMonitor
+
+    var body: some View {
+        Menu("Rate Sources") {
+            Section("Follow changes on") {
+                ForEach(monitor.audioDevices, id: \.uid) { device in
+                    Toggle(device.name, isOn: Binding(get: { monitor.isSource(device) }, set: { _ in monitor.toggleSource(device) }))
+                }
+                // A chosen source that is unplugged stays chosen; show it so it can be removed.
+                ForEach(monitor.sources.filter { source in !monitor.audioDevices.contains { CoreAudioRate.uid($0.uid, matches: source.uidMatch) } },
+                        id: \.uidMatch) { source in
+                    Toggle("\(source.name) (not connected)", isOn: Binding(get: { true }, set: { _ in monitor.removeSource(source) }))
+                }
+            }
+            if !monitor.sources.isEmpty {
+                Section("Clocks the Dante network (set first; the sync stops if it can't change)") {
+                    ForEach(monitor.sources, id: \.uidMatch) { source in
+                        Toggle(source.name, isOn: Binding(get: { source.clocksNetwork }, set: { monitor.setClocksNetwork(source, $0) }))
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// The Dante device set first and waited on for word-clock lock, or none.
+struct LeaderMenu: View {
+    let monitor: RateMonitor
+
+    var body: some View {
+        Menu("Dante Clock Leader" + (monitor.leaderName.map { ": \($0)" } ?? ": None")) {
+            Toggle("None (set every Dante device together)",
+                   isOn: Binding(get: { monitor.leaderID == nil }, set: { _ in monitor.setLeader(nil) }))
+            Divider()
+            ForEach(monitor.danteDevices, id: \.id) { device in
+                Toggle(device.label, isOn: Binding(get: { monitor.leaderID == device.id }, set: { _ in monitor.setLeader(device) }))
+            }
+            if let id = monitor.leaderID, let name = monitor.leaderName, !monitor.danteDevices.contains(where: { $0.id == id }) {
+                Toggle("\(name) (not heard)", isOn: .constant(true))
             }
         }
     }

@@ -4,11 +4,11 @@ import XCTest
 final class BandUpCheckTests: XCTestCase {
     let domain: [(label: String, rate: Int)] = [("FF-PULSE-16-DX", 48000), ("Bryans-MBP-M2-Max", 48000), ("D2USB-6152f1", 48000)]
 
-    func options(rate: Int? = nil, source: SyncOptions.Source = .usb16x16, allowBandUp: Bool = false,
+    func options(rate: Int? = nil, source: RateSource = .usbAoIP, allowBandUp: Bool = false,
                  followsSource: Bool = false, dryRun: Bool = false) -> SyncOptions {
         var options = SyncOptions()
         options.targetRate = rate
-        options.source = source
+        options.source = source.uidMatch
         options.allowBandUp = allowBandUp
         options.followsSource = followsSource
         options.dryRun = dryRun
