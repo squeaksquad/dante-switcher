@@ -11,13 +11,17 @@ Usage:
                   [--usb882-settle 10]
       Set the Metric Halo first if it is not the source, then the leader, wait for word-clock
       lock, then every other Dante device and the USB-AoIP together, each verified.
-      Without --rate, the target is the source's CoreAudio rate (default: the Metric Halo).
+      Without --rate, the target is the source's CoreAudio rate (default: the Metric Halo),
+      and the sync follows it even into a higher rate band (44.1/48 → 88.2/96 → 176.4/192),
+      printing a note that channel counts may drop. An explicit --rate into a higher band is
+      refused unless --allow-band-up is given; on a follow, --allow-band-up changes nothing.
       When the USB-AoIP is set to 88.2k, the sync holds --usb882-settle seconds before it
       reports: macOS needs the 88.2k stream settled before an app starts audio on it.
   dante-sync watch [same options as sync, less --rate and --source]
       Follow rate changes on the Metric Halo or the USB-AoIP (a DAW session, Audio MIDI Setup,
       MIOConsole3d): a change that holds for 2 s is synced to everything else, the changed
-      device being the source. Ctrl-C stops it.
+      device being the source; like sync --source, it follows across a rate band with a note.
+      Ctrl-C stops it.
 """
 
 var arguments = Array(CommandLine.arguments.dropFirst())
@@ -161,6 +165,7 @@ case "watch":
                 }
                 var run = options
                 run.targetRate = decision.rate
+                run.followsSource = true
                 run.source = SyncOptions.Source(rawValue: decision.source) ?? .metricHalo
                 printReport(await SyncEngine(network: network, log: log).run(run))
                 follower.finished(readings(), at: Date())

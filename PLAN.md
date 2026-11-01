@@ -237,7 +237,9 @@ at the repo root). It is native only: CoreAudio, BSD multicast sockets, and `NWB
   word-clock lock (via the 92 B query; the reply arrives on 224.0.0.231:8702). Takes
   about 5 s, against about 60 s for the netaudio inventory.
 - `dante-sync sync [--rate] [--exclude] [--dry-run] [--allow-band-up]`: leader first,
-  wait for lock, then followers in parallel, each verified by heartbeat.
+  wait for lock, then followers in parallel, each verified by heartbeat. A move up a rate
+  band needs `--allow-band-up` only for an explicit `--rate`; a follow of the source does not
+  (2026-10-31 entry below).
 - `swift test`: packet builders and parsers are checked against bytes captured on this
   network.
 - Not yet run for real: a live sync (status and dry-run only).
@@ -279,6 +281,17 @@ Address already in use`: DVS's `conmon_server` holds 224.0.0.233:8708 and 224.0.
 with SO_REUSEADDR only, and the BSD stack counts SO_REUSEADDR as sharing only for a bind to a
 multicast address. The two listeners now bind their group address, not `*`; with DVS running,
 `status` lists DVS and `sync --dry-run` plans it. Not yet run: a live rate move with DVS up.
+
+**2026-10-31: a follow crosses rate bands without `--allow-band-up`.** On 2026-11-01 01:27 UTC
+the Mac's USB-AoIP was set to 96k (a Pro Tools session sets the device rate) and
+`sync --source usb-aoip` aborted: 96k is a higher band than the Pulse, DVS and the D2USB at 48k.
+When the rate comes from the source, the user has already chosen it, and a domain left behind
+is broken, so the band-up refusal no longer applies to a follow: `sync` without `--rate`, and
+`watch` (it passes the rate it saw with `followsSource`). The follow prints a note that channel
+counts may drop (at 96k the Pulse has 32 Dante channels each way, not 64; the routing fits).
+An explicit `--rate` into a higher band still needs `--allow-band-up`; on a follow the flag is
+accepted and does nothing. `BandUpCheck` decides, tested in `BandUpCheckTests`. Not yet run
+live.
 
 MenuBarExtra UI, settings (MH device picker, exclude list, timings, **Dante network
 interface**), SyncCoordinator, notifications, "Sync now", launch-at-login (`SMAppService`),

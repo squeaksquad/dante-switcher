@@ -21,8 +21,13 @@ public struct SyncOptions {
     /// Case-insensitive substrings of device names (or IDs) that must not follow.
     public var exclude: [String] = []
     public var dryRun = false
-    /// Moving up a rate band can reduce channel counts; refuse unless explicitly allowed.
+    /// Moving up a rate band can reduce channel counts; an explicit `--rate` that does is
+    /// refused unless this is set. A follow (`followsSource`) never needs it.
     public var allowBandUp = false
+    /// The target is the rate the user already set on `source` (`sync --source`, or `watch`
+    /// passing on the rate it saw): the rest of the domain has to follow it, band or not.
+    /// True whenever `targetRate` is nil.
+    public var followsSource = false
     public var discoveryWait: TimeInterval = 4
     /// After the USB 16x16 is verified at 88.2k, hold this long before the sync reports.
     /// macOS (AppleUSBAudio) latches the device's audio into zeros, both ways, when an app
@@ -58,6 +63,37 @@ public struct SyncReport {
         let parts = [DeviceResult.Outcome.changed, .alreadyAtRate, .planned, .skipped, .failed]
             .compactMap { outcome in counts[outcome].map { "\($0) \(outcome.rawValue)" } }
         return "\(targetRate.map(formatRate) ?? "?"): " + parts.joined(separator: ", ")
+    }
+}
+
+/// The band-up rule: a move to a higher rate band can drop channel counts (at 96k the Pulse has
+/// 32 Dante channels each way, not 64). An explicit rate needs `allowBandUp`; a follow of the
+/// source goes ahead with a note.
+public struct BandUpCheck: Equatable {
+    /// Set when the sync must not run.
+    public let abort: String?
+    /// Set when the sync runs across a band: log it.
+    public let note: String?
+    /// Devices this run would move up a band without consent (shown in a dry run's plan).
+    public let needsConsent: Bool
+
+    public init(target: Int, devices: [(label: String, rate: Int)], options: SyncOptions) {
+        let movingUp = devices.filter { SampleRate.band(target) > SampleRate.band($0.rate) }
+        let names = movingUp.map { "\($0.label) (\(formatRate($0.rate)))" }.joined(separator: ", ")
+        let follows = options.followsSource || options.targetRate == nil
+        needsConsent = !movingUp.isEmpty && !follows && !options.allowBandUp
+        if movingUp.isEmpty {
+            abort = nil
+            note = nil
+        } else if needsConsent && !options.dryRun {
+            abort = "\(formatRate(target)) is a higher rate band than \(names); channel counts may drop."
+                + " Re-run with --allow-band-up to proceed. Nothing changed"
+            note = nil
+        } else {
+            abort = nil
+            note = "NOTE: \(formatRate(target)) is a higher rate band than \(names); channel counts may drop"
+                + (follows ? " (following \(options.source.rawValue))" : "")
+        }
     }
 }
 
@@ -109,13 +145,13 @@ public final class SyncEngine {
             return report
         }
 
-        let movingUp = ([leader] + followers).filter { SampleRate.band(target) > SampleRate.band($0.sampleRate!) }
-        if !movingUp.isEmpty && !options.allowBandUp && !options.dryRun {
-            report.aborted = "\(formatRate(target)) is a higher rate band than " +
-                movingUp.map { "\($0.label) (\(formatRate($0.sampleRate!)))" }.joined(separator: ", ") +
-                "; channel counts may drop. Re-run with --allow-band-up to proceed. Nothing changed"
+        let bandUp = BandUpCheck(target: target, devices: ([leader] + followers).map { ($0.label, $0.sampleRate!) },
+                                 options: options)
+        if let abort = bandUp.abort {
+            report.aborted = abort
             return report
         }
+        if let note = bandUp.note { log(note) }
 
         let master = options.followMaster && options.source != .metricHalo
             ? CoreAudioRate.findDevice(uidPrefix: CoreAudioRate.metricHaloUIDPrefix) : nil
@@ -134,7 +170,7 @@ public final class SyncEngine {
                 report.results.append(current == target
                     ? .init(device: device.label, outcome: .alreadyAtRate, detail: formatRate(current))
                     : .init(device: device.label, outcome: .planned, detail: "\(formatRate(current)) → \(formatRate(target)) on port \(device.settingsPort)"
-                            + (SampleRate.band(target) > SampleRate.band(current) && !options.allowBandUp ? " (needs --allow-band-up)" : "")))
+                            + (SampleRate.band(target) > SampleRate.band(current) && bandUp.needsConsent ? " (needs --allow-band-up)" : "")))
             }
             return report
         }
