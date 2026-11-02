@@ -1,0 +1,7 @@
+#!/bin/sh
+# Start the app for the logged-in user (the installer runs as root), unless no one is logged in.
+USER_NAME=$(stat -f%Su /dev/console)
+if [ -n "$USER_NAME" ] && [ "$USER_NAME" != "root" ]; then
+    launchctl asuser "$(id -u "$USER_NAME")" sudo -u "$USER_NAME" open /Applications/DanteSwitcher.app
+fi
+exit 0

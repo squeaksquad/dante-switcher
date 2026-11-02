@@ -1,0 +1,4 @@
+#!/bin/sh
+# Quit a running copy so the installer can replace it; postinstall starts it again.
+pkill -x DanteSwitcher
+exit 0

@@ -8,11 +8,14 @@ import ServiceManagement
 @MainActor @Observable
 final class RateMonitor {
     struct Row: Identifiable {
+        enum Status { case leader, atRate, mismatched, noHeartbeat }
         let id: String
         let label: String
         let rate: String
-        let mark: String
+        let status: Status
         let isCoreAudio: Bool
+        /// A source that clocks the Dante network (set and verified before any Dante device).
+        let clocksNetwork: Bool
     }
 
     static let interfaceKey = "interface"
@@ -138,7 +141,7 @@ final class RateMonitor {
             guard let device = source.find() else { continue }
             let label = "\(source.name) (CoreAudio)"
             readings.append(NetworkRate.Reading(label: label, rate: CoreAudioRate.nominalRate(of: device)))
-            labels[label] = source.name + (source.clocksNetwork ? "   clocks the network" : "")
+            labels[label] = source.name
             coreAudio.insert(label)
         }
         networkRate = NetworkRate(readings: readings, leaderMatch: leaderLabel, now: now)
@@ -150,11 +153,12 @@ final class RateMonitor {
         let clocking = Set(sources.filter(\.clocksNetwork).map { "\($0.name) (CoreAudio)" })
         let first = readings.filter { $0.label == leaderLabel || clocking.contains($0.label) }
         rows = (first + readings.filter { !first.contains($0) }).map { reading in
-            let mark = reading.label == networkRate.leader ? "leader"
-                : stale.contains(reading.label) ? "no heartbeat"
-                : mismatched.contains(reading.label) ? "⚠" : ""
+            let status: Row.Status = reading.label == networkRate.leader ? .leader
+                : stale.contains(reading.label) || reading.rate == nil ? .noHeartbeat
+                : mismatched.contains(reading.label) ? .mismatched : .atRate
             return Row(id: reading.label, label: labels[reading.label] ?? reading.label,
-                       rate: reading.rate.map(formatRate) ?? "—", mark: mark, isCoreAudio: coreAudio.contains(reading.label))
+                       rate: reading.rate.map(formatRate) ?? "—", status: status,
+                       isCoreAudio: coreAudio.contains(reading.label), clocksNetwork: clocking.contains(reading.label))
         }
     }
 

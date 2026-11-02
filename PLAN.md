@@ -426,12 +426,38 @@ on, a logout and login, and turning it off in System Settings. The plan as built
 - **Check by hand** (`SMAppService` isn't unit-testable here): turn it on, log out and in, see
   the icon come up; turn it off in System Settings, open the menu, see the toggle off.
 
+#### Built 2026-11-01: the menu shows status, a Settings window holds the setup
+The menu had grown into a mix of status, actions and settings submenus, with labels only the
+author could read ("Dante Clock Leader: FF-PULSE-16-DX", "clocks the network" inside a row).
+- **Menu:** a one-line verdict ("All devices at 48k" / "2 not at 48k"; a second line only when the
+  leader is missing or not chosen), then "Dante Devices" and "Rate Sources on This Mac", each row
+  with an icon for its state (★ leader, metronome for a source that clocks Dante, ✓ at rate,
+  ⚠ mismatched, ? not heard) and its rate; then Follow, "Sync Now To ▸" and "Last Sync <time>" (✓ or
+  ⚠); then Settings… (⌘,), Show Log…, Quit. Menu items can't hold columns, so the rate follows the
+  name.
+- **Settings window** (a `Window` opened like the log, since a menu bar app has no app menu for
+  `SettingsLink`): Dante (clock leader, network interface), Rate Sources (chosen ones with their
+  Clocks Dante box, every other CoreAudio device under a collapsed "Other audio devices (N)"), and
+  General (Launch at Login). Each section has a line on what it does, for people other than Bryan.
+- Checked 2026-11-01 on the studio Mac by reading the menu through accessibility and screenshots
+  of the menu and the window. No behaviour changed: the same `RateMonitor` calls.
+
 ### Phase 4 — Ship
-Developer ID signing, hardened runtime, notarization, DMG, using the
-macos-notarization skill. Entitlements: `com.apple.security.network.client`/`server`
-if sandboxed (non-sandboxed is likely simpler for multicast/mDNS), and
-`NSLocalNetworkUsageDescription` + `NSBonjourServices` in Info.plist (macOS 15+
-local-network privacy prompt).
+**Decided 2026-11-01: a signed, notarized `.pkg` on GitHub Releases.** `scripts/release.sh <version>`
+runs the tests, builds through `scripts/build_app.sh` (now universal arm64 + x86_64, `VERSION` for
+`CFBundleShortVersionString`, the commit count for `CFBundleVersion`), packages with `pkgbuild`
+(installs to `/Applications`, not relocatable: the login item and the local network grant follow
+that path; `scripts/pkg/preinstall` quits a running copy, `postinstall` opens the new one for the
+console user), signs with the Developer ID Installer identity, notarizes with `notarytool`
+(keychain profile `vibetronics`, shared with Vibetron, or `NOTARY_PROFILE`), staples, and checks with `spctl`. `--publish` then
+tags `v<version>` and creates a **draft** GitHub release with the pkg. No sandbox, no entitlements;
+`NSLocalNetworkUsageDescription` and `NSBonjourServices` are in the Info.plist.
+- Checked 2026-11-01: the universal build, a pkg signed with the Installer identity (pkgutil
+  says signed for distribution), and that the `vibetronics` profile authenticates on the studio Mac.
+  Not yet run: a notarization of this app.
+- Before a public release: the repo is private (release assets are visible to collaborators only);
+  it has no README or license; the Developer ID Installer certificate expires 2027-02-01.
+- Open: an update path (Sparkle, or a "new version" check against GitHub releases).
 
 ## Open questions for you
 1. Which Mac will run this? Is it the one running DVS (Bryans-MacBook-Pro), and which
