@@ -5,10 +5,11 @@ import SwiftUI
 @main
 struct DanteSwitcherApp: App {
     @State private var monitor = RateMonitor()
+    @State private var updates = UpdateChecker()
 
     var body: some Scene {
         MenuBarExtra {
-            MenuContent(monitor: monitor)
+            MenuContent(monitor: monitor, updates: updates)
         } label: {
             Text(monitor.title).monospacedDigit()
         }
@@ -24,6 +25,7 @@ struct DanteSwitcherApp: App {
 
 struct MenuContent: View {
     @Bindable var monitor: RateMonitor
+    let updates: UpdateChecker
 
     var body: some View {
         Section {
@@ -76,6 +78,16 @@ struct MenuContent: View {
             }
         }
         Section {
+            if let release = updates.available {
+                Button {
+                    updates.open(release)
+                } label: {
+                    Label("Update Available: \(release.version)…", systemImage: "arrow.down.circle")
+                }
+            } else {
+                Button("Check for Updates…") { Task { await updates.check(manual: true) } }
+                    .disabled(updates.checking)
+            }
             OpenWindowButton(title: "Settings…", id: "settings")
                 .keyboardShortcut(",")
             OpenWindowButton(title: "Show Log…", id: "log")

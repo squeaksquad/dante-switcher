@@ -47,6 +47,12 @@ codesign --verify --deep --strict --verbose=2 "$APP"
 echo "Built $APP"
 
 if [[ "${1:-}" == "--install" ]]; then
+    # A copy put there by the pkg is owned by root; this script can't replace it.
+    if [[ -e /Applications/DanteSwitcher.app && ! -w /Applications/DanteSwitcher.app ]]; then
+        echo "/Applications/DanteSwitcher.app is owned by $(stat -f%Su /Applications/DanteSwitcher.app) (installed by the pkg)."
+        echo "Remove it once with: sudo rm -rf /Applications/DanteSwitcher.app"
+        exit 1
+    fi
     pkill -x DanteSwitcher || true
     rm -rf /Applications/DanteSwitcher.app
     ditto "$APP" /Applications/DanteSwitcher.app

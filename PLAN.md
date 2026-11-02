@@ -455,9 +455,19 @@ tags `v<version>` and creates a **draft** GitHub release with the pkg. No sandbo
 - Checked 2026-11-01: the universal build, a pkg signed with the Installer identity (pkgutil
   says signed for distribution), and that the `vibetronics` profile authenticates on the studio Mac.
   Not yet run: a notarization of this app.
-- Before a public release: the repo is private (release assets are visible to collaborators only);
-  it has no README or license; the Developer ID Installer certificate expires 2027-02-01.
-- Open: an update path (Sparkle, or a "new version" check against GitHub releases).
+- Bryan installed 0.2.0 from the pkg on 2026-11-01. The Developer ID Installer certificate expires
+  2027-02-01.
+- **Update check (2026-11-01):** at launch and every 24 h the app asks GitHub's
+  `releases/latest` (published releases only: no drafts, no pre-releases) and compares the tag with
+  `CFBundleShortVersionString` (`ReleaseVersion`, tested). A newer one shows as "Update Available:
+  0.3.0…" in the menu and opens the release page; nothing is downloaded or installed by the app.
+  "Check for Updates…" says what it found. Sparkle was the alternative; not worth a framework yet.
+  Checked: the private repo answers 404 ("no published release found"); pointed at a public repo
+  with a newer tag, the menu showed the update.
+- **License: GPL-3.0** (2026-11-01). Others may sell it, but anything built on it ships its source
+  under the GPL too. README written for people outside the studio.
+- A pkg install leaves `/Applications/DanteSwitcher.app` owned by root, so `build_app.sh --install`
+  stops and says to remove it with sudo once.
 
 ## Open questions for you
 1. Which Mac will run this? Is it the one running DVS (Bryans-MacBook-Pro), and which
